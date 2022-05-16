@@ -59,10 +59,14 @@ double lastTime;
 // double timerDelay = 30000;
 double timerDelay = 10000;
 
+esp32FOTA esp32FOTA("esp32-fota-http", "1.0.0");
+
 void setup() {
   Serial.begin(115200);
   pixels.begin();
   pinMode(BUTTON, INPUT_PULLUP);
+
+  esp32FOTA.checkURL = "http://server/fota/fota.json";
 
   ledcAttachPin(5, 1);
   ledcAttachPin(6, 2);
