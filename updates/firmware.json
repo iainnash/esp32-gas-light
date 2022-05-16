@@ -1,5 +1,5 @@
 {
     "type": "esp32-gas-light",
-    "version": "1.0.0",
+    "version": 2,
     "url": "https://gas-light.iain.in/updates/v1_1_0.bin"
 }
