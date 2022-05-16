@@ -74,7 +74,7 @@ void setup()
   pinMode(BUTTON, INPUT_PULLUP);
 
   SPIFFS.begin(true);
-  esp32FOTA.checkURL = "http://server/fota/fota.json";
+  esp32FOTA.checkURL = "https://gas-light.iain.in/updates/firmware.json";
 
   ledcAttachPin(5, 1);
   ledcAttachPin(6, 2);
