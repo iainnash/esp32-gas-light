@@ -3,8 +3,10 @@
 #include "WiFi.h"
 #include "HTTPClient.h"
 #include "ArduinoJSON.h"
-#include <SPIFFS.h>
 #include <esp32fota.h>
+
+#include "nvs.h"
+#include "nvs_flash.h"
 
 #define BUTTON 3
 #define LED 2
@@ -14,16 +16,39 @@ Adafruit_NeoPixel pixels(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
 
 String serverName = "http://gas-monitor.isiain.workers.dev/gas_light?light_id=0";
 
+int disconnectCount = 0;
+
+void setupNVS()
+{
+  // Initialize NVS
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+  {
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(ret);
+}
+
 void SysProvEvent(arduino_event_t *sys_event)
 {
   switch (sys_event->event_id)
   {
+     case WIFI_PROV_CRED_FAIL: { 
+        Serial.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
+        
+        WiFi.disconnect(true, true);
+        ESP.restart();
+        break;
+    }
+
   case ARDUINO_EVENT_WIFI_STA_GOT_IP:
     Serial.print("\nConnected IP address : ");
     Serial.println(IPAddress(sys_event->event_info.got_ip.ip_info.ip.addr));
     break;
   case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
     Serial.println("\nDisconnected. Connecting to the AP again... ");
+    disconnectCount += 1;
     break;
   case ARDUINO_EVENT_PROV_START:
     Serial.println("\nProvisioning started\nGive Credentials of your access point using \" Android app \"");
@@ -35,6 +60,7 @@ void SysProvEvent(arduino_event_t *sys_event)
     Serial.println((const char *)sys_event->event_info.prov_cred_recv.ssid);
     Serial.print("\tPassword : ");
     Serial.println((char const *)sys_event->event_info.prov_cred_recv.password);
+    WiFi.begin((char const *)sys_event->event_info.prov_cred_recv.ssid, (char const *)sys_event->event_info.prov_cred_recv.password);
     break;
   }
   case ARDUINO_EVENT_PROV_CRED_FAIL:
@@ -64,8 +90,27 @@ double lastTime;
 // double timerDelay = 30000;
 double timerDelay = 10000;
 
-esp32FOTA esp32FOTA("esp32-fota-http", 1, false, false);
+esp32FOTA esp32FOTA("esp32-fota-http", 1, false, true);
 
+void runProvision()
+{
+
+  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_0");
+}
+
+void provisionSetup()
+{
+
+//   bool provisioned = false;
+
+//   /* Let's find out if the device is provisioned */
+//   ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
+
+//   if (!provisioned)
+//   {
+    runProvision();
+//   }
+}
 
 void setup()
 {
@@ -73,7 +118,6 @@ void setup()
   pixels.begin();
   pinMode(BUTTON, INPUT_PULLUP);
 
-  SPIFFS.begin(true);
   esp32FOTA.checkURL = "https://gas-light.iain.in/updates/firmware.json";
 
   ledcAttachPin(5, 1);
@@ -88,7 +132,9 @@ void setup()
   WiFi.onEvent(SysProvEvent);
   pixels.setPixelColor(0, pixels.Color(0, 0, 100));
   pixels.show();
-  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_0");
+  provisionSetup();
+
+  setupNVS();
 }
 
 int lastState = HIGH;
@@ -108,6 +154,10 @@ void handleNetwork()
 {
   if ((millis() - lastTime) > timerDelay)
   {
+    if (disconnectCount > 2 && WiFi.status() != WL_CONNECTED)
+    {
+      runProvision();
+    }
     // Check WiFi connection status
     if (WiFi.status() == WL_CONNECTED)
     {
