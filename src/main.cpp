@@ -4,6 +4,7 @@
 #include "HTTPClient.h"
 #include "ArduinoJSON.h"
 #include <esp32fota.h>
+#include "Preferences.h"
 
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -13,10 +14,17 @@
 #define NUMPIXELS 1
 
 Adafruit_NeoPixel pixels(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
+Preferences prefs;
 
-String serverName = "http://gas-monitor.isiain.workers.dev/gas_light?light_id=0";
+String serverName = "http://gas-monitor.isiain.workers.dev/gas_light?light_id=1";
 
 int disconnectCount = 0;
+
+void runProvision()
+{
+
+  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_0");
+}
 
 void setupNVS()
 {
@@ -34,13 +42,14 @@ void SysProvEvent(arduino_event_t *sys_event)
 {
   switch (sys_event->event_id)
   {
-     case WIFI_PROV_CRED_FAIL: { 
-        Serial.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
-        
-        WiFi.disconnect(true, true);
-        ESP.restart();
-        break;
-    }
+  case WIFI_PROV_CRED_FAIL:
+  {
+    Serial.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
+
+    WiFi.disconnect(true, true);
+    ESP.restart();
+    break;
+  }
 
   case ARDUINO_EVENT_WIFI_STA_GOT_IP:
     Serial.print("\nConnected IP address : ");
@@ -49,6 +58,11 @@ void SysProvEvent(arduino_event_t *sys_event)
   case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
     Serial.println("\nDisconnected. Connecting to the AP again... ");
     disconnectCount += 1;
+    if (disconnectCount > 4) {
+      Serial.println("provisioning");
+      WiFi.disconnect(true, true);
+      runProvision();
+    }
     break;
   case ARDUINO_EVENT_PROV_START:
     Serial.println("\nProvisioning started\nGive Credentials of your access point using \" Android app \"");
@@ -60,7 +74,12 @@ void SysProvEvent(arduino_event_t *sys_event)
     Serial.println((const char *)sys_event->event_info.prov_cred_recv.ssid);
     Serial.print("\tPassword : ");
     Serial.println((char const *)sys_event->event_info.prov_cred_recv.password);
-    WiFi.begin((char const *)sys_event->event_info.prov_cred_recv.ssid, (char const *)sys_event->event_info.prov_cred_recv.password);
+    // WiFi.begin((char const *)sys_event->event_info.prov_cred_recv.ssid, (char const *)sys_event->event_info.prov_cred_recv.password);
+    Serial.println("saving login prefs");
+    prefs.begin("wifi");
+    prefs.putString("ssid", (const char *)sys_event->event_info.prov_cred_recv.ssid);
+    prefs.putString("pass", (const char *)sys_event->event_info.prov_cred_recv.password);
+    prefs.end();
     break;
   }
   case ARDUINO_EVENT_PROV_CRED_FAIL:
@@ -92,24 +111,39 @@ double timerDelay = 10000;
 
 esp32FOTA esp32FOTA("esp32-fota-http", 1, false, true);
 
-void runProvision()
-{
-
-  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_0");
-}
-
 void provisionSetup()
 {
+  runProvision();
+  return;
 
-//   bool provisioned = false;
+  prefs.begin("wifi");
+  String ssid = prefs.getString("ssid");
+  String pass = prefs.getString("pass");
 
-//   /* Let's find out if the device is provisioned */
-//   ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
-
-//   if (!provisioned)
-//   {
+  if (!ssid.length())
+  {
+    // Serial.println(prefs.putString("ssid", "-NYC Mesh Community WiFi-"));
+    // prefs.end();
+    // // nvs_commit();
+    // Serial.println("wrote prefs string");
+    // Serial.println("provisioning");
     runProvision();
-//   }
+  }
+  else
+  {
+    prefs.end();
+    Serial.println("has settings");
+    WiFi.begin(ssid.c_str(), pass.c_str());
+  }
+
+  //   bool provisioned = false;
+
+  //   /* Let's find out if the device is provisioned */
+  //   ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
+
+  //   if (!provisioned)
+  //   {
+  //   }
 }
 
 void setup()
@@ -134,7 +168,7 @@ void setup()
   pixels.show();
   provisionSetup();
 
-  setupNVS();
+  // setupNVS();
 }
 
 int lastState = HIGH;
@@ -161,6 +195,7 @@ void handleNetwork()
     // Check WiFi connection status
     if (WiFi.status() == WL_CONNECTED)
     {
+      disconnectCount = 0;
       pixels.setPixelColor(0, pixels.Color(100, 100, 0));
       pixels.show();
       HTTPClient http;
@@ -225,8 +260,17 @@ void handleNetwork()
     {
       turnOffLamps();
       Serial.println("WiFi Disconnected");
+      // disconnectCount += 1;
       pixels.setPixelColor(0, pixels.Color(100, 0, 0));
       pixels.show();
+      // if (disconnectCount > 6) {
+        // Attempting reconnect
+        WiFi.reconnect();
+        Serial.println("Attempting reconnection");
+        // WiFi.disconnect(true);
+        // delay(100);
+        // ESP.restart();
+      // }
     }
     lastTime = millis();
   }
