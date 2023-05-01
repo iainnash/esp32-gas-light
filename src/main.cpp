@@ -3,7 +3,7 @@
 #include "WiFi.h"
 #include "HTTPClient.h"
 #include "ArduinoJSON.h"
-#include <esp32fota.h>
+// #include <esp32fota.h>
 #include "Preferences.h"
 
 #include "nvs.h"
@@ -18,13 +18,12 @@
 Adafruit_NeoPixel pixels(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
 Preferences prefs;
 
-String serverName = "http://gas-monitor.isiain.workers.dev/gas_light?light_id=1";
+String serverName = "https://light.nftunlock.com/api/light?id=3";
 
 int disconnectCount = 0;
 
 void runProvision()
 {
-
   WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_3");
 }
 
@@ -111,7 +110,7 @@ double lastTime;
 // double timerDelay = 30000;
 double timerDelay = 10000;
 
-esp32FOTA esp32FOTA("esp32-fota-http", 1, false, true);
+// esp32FOTA esp32FOTA("esp32-fota-http", 1, false, true);
 
 void provisionSetup()
 {
@@ -316,11 +315,11 @@ void loop()
   {
     pixels.setPixelColor(0, pixels.Color(0, 100, 255));
     pixels.show();
-    bool updateNeeded = esp32FOTA.execHTTPcheck();
-    if (updateNeeded)
-    {
-      esp32FOTA.execOTA();
-    }
+    // bool updateNeeded = esp32FOTA.execHTTPcheck();
+    // if (updateNeeded)
+    // {
+    //   esp32FOTA.execOTA();
+    // }
     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
     pixels.show();
     checkedFirmwareUpdate = true;
