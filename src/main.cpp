@@ -9,6 +9,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+// #define Serial Serial1
+
 #define BUTTON 3
 #define LED 2
 #define NUMPIXELS 1
@@ -23,7 +25,7 @@ int disconnectCount = 0;
 void runProvision()
 {
 
-  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_0");
+  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_3");
 }
 
 void setupNVS()
@@ -152,7 +154,7 @@ void setup()
   pixels.begin();
   pinMode(BUTTON, INPUT_PULLUP);
 
-  esp32FOTA.checkURL = "https://gas-light.iain.in/updates/firmware.json";
+  //esp32FOTA.checkURL = "https://gas-light.iain.in/updates/firmware.json";
 
   ledcAttachPin(5, 1);
   ledcAttachPin(6, 2);
