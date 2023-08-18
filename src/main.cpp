@@ -3,7 +3,7 @@
 #include "WiFi.h"
 #include "HTTPClient.h"
 #include "ArduinoJSON.h"
-#include <esp32fota.h>
+// #include <esp32fota.h>
 #include "Preferences.h"
 
 #include "nvs.h"
@@ -16,14 +16,15 @@
 Adafruit_NeoPixel pixels(NUMPIXELS, LED, NEO_GRB + NEO_KHZ800);
 Preferences prefs;
 
-String serverName = "http://gas-monitor.isiain.workers.dev/gas_light?light_id=1";
+String serverName = "https://light.nftunlock.com/api/light?id=3";
 
 int disconnectCount = 0;
+bool provisioning = false;
 
 void runProvision()
 {
-
-  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_1, "0xtoohigh", "Prov_GasLight_0");
+  provisioning = true;
+  WiFiProv.beginProvision(WIFI_PROV_SCHEME_BLE, WIFI_PROV_SCHEME_HANDLER_FREE_BTDM, WIFI_PROV_SECURITY_0, "0xtoohigh", "Prov_GasLight_3");
 }
 
 void setupNVS()
@@ -44,7 +45,7 @@ void SysProvEvent(arduino_event_t *sys_event)
   {
   case WIFI_PROV_CRED_FAIL:
   {
-    Serial.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
+    Serial1.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
 
     WiFi.disconnect(true, true);
     ESP.restart();
@@ -52,50 +53,55 @@ void SysProvEvent(arduino_event_t *sys_event)
   }
 
   case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-    Serial.print("\nConnected IP address : ");
-    Serial.println(IPAddress(sys_event->event_info.got_ip.ip_info.ip.addr));
+    Serial1.print("\nConnected IP address : ");
+    Serial1.println(IPAddress(sys_event->event_info.got_ip.ip_info.ip.addr));
     break;
   case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
-    Serial.println("\nDisconnected. Connecting to the AP again... ");
+    Serial1.println("\nDisconnected. Connecting to the AP again... ");
     disconnectCount += 1;
-    if (disconnectCount > 4) {
-      Serial.println("provisioning");
+    if (disconnectCount > 4)
+    {
+      Serial1.println("provisioning");
       WiFi.disconnect(true, true);
       runProvision();
     }
     break;
   case ARDUINO_EVENT_PROV_START:
-    Serial.println("\nProvisioning started\nGive Credentials of your access point using \" Android app \"");
+    Serial1.println("\nProvisioning started\nGive Credentials of your access point using \" Android app \"");
+    provisioning = true;
     break;
   case ARDUINO_EVENT_PROV_CRED_RECV:
   {
-    Serial.println("\nReceived Wi-Fi credentials");
-    Serial.print("\tSSID : ");
-    Serial.println((const char *)sys_event->event_info.prov_cred_recv.ssid);
-    Serial.print("\tPassword : ");
-    Serial.println((char const *)sys_event->event_info.prov_cred_recv.password);
-    // WiFi.begin((char const *)sys_event->event_info.prov_cred_recv.ssid, (char const *)sys_event->event_info.prov_cred_recv.password);
-    Serial.println("saving login prefs");
+    Serial1.println("\nReceived Wi-Fi credentials");
+    Serial1.print("\tSSID : ");
+    Serial1.println((const char *)sys_event->event_info.prov_cred_recv.ssid);
+    Serial1.print("\tPassword : ");
+    Serial1.println((char const *)sys_event->event_info.prov_cred_recv.password);
+    Serial1.println("saving login prefs");
     prefs.begin("wifi");
     prefs.putString("ssid", (const char *)sys_event->event_info.prov_cred_recv.ssid);
     prefs.putString("pass", (const char *)sys_event->event_info.prov_cred_recv.password);
     prefs.end();
+    // WiFi.begin((char const *)sys_event->event_info.prov_cred_recv.ssid, (char const *)sys_event->event_info.prov_cred_recv.password);
     break;
   }
   case ARDUINO_EVENT_PROV_CRED_FAIL:
   {
-    Serial.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
+    provisioning = false;
+    Serial1.println("\nProvisioning failed!\nPlease reset to factory and retry provisioning\n");
     if (sys_event->event_info.prov_fail_reason == WIFI_PROV_STA_AUTH_ERROR)
-      Serial.println("\nWi-Fi AP password incorrect");
+      Serial1.println("\nWi-Fi AP password incorrect");
     else
-      Serial.println("\nWi-Fi AP not found....Add API \" nvs_flash_erase() \" before beginProvision()");
+      Serial1.println("\nWi-Fi AP not found....Add API \" nvs_flash_erase() \" before beginProvision()");
     break;
   }
   case ARDUINO_EVENT_PROV_CRED_SUCCESS:
-    Serial.println("\nProvisioning Successful");
+    provisioning = false;
+    Serial1.println("\nProvisioning Successful");
     break;
   case ARDUINO_EVENT_PROV_END:
-    Serial.println("\nProvisioning Ends");
+    provisioning = false;
+    Serial1.println("\nProvisioning Ends");
     break;
   default:
     break;
@@ -109,12 +115,12 @@ double lastTime;
 // double timerDelay = 30000;
 double timerDelay = 10000;
 
-esp32FOTA esp32FOTA("esp32-fota-http", 1, false, true);
+// esp32FOTA esp32FOTA("esp32-fota-http", 1, false, true);
 
 void provisionSetup()
 {
-  runProvision();
-  return;
+  // runProvision();
+  // return;
 
   prefs.begin("wifi");
   String ssid = prefs.getString("ssid");
@@ -122,37 +128,24 @@ void provisionSetup()
 
   if (!ssid.length())
   {
-    // Serial.println(prefs.putString("ssid", "-NYC Mesh Community WiFi-"));
-    // prefs.end();
-    // // nvs_commit();
-    // Serial.println("wrote prefs string");
-    // Serial.println("provisioning");
     runProvision();
   }
   else
   {
     prefs.end();
-    Serial.println("has settings");
+    Serial1.println("has settings");
     WiFi.begin(ssid.c_str(), pass.c_str());
   }
-
-  //   bool provisioned = false;
-
-  //   /* Let's find out if the device is provisioned */
-  //   ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
-
-  //   if (!provisioned)
-  //   {
-  //   }
 }
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial1.begin(115200);
+  Serial1.println("HLO");
   pixels.begin();
   pinMode(BUTTON, INPUT_PULLUP);
 
-  esp32FOTA.checkURL = "https://gas-light.iain.in/updates/firmware.json";
+  // esp32FOTA.checkURL = "https://gas-light.iain.in/updates/firmware.json";
 
   ledcAttachPin(5, 1);
   ledcAttachPin(6, 2);
@@ -167,8 +160,7 @@ void setup()
   pixels.setPixelColor(0, pixels.Color(0, 0, 100));
   pixels.show();
   provisionSetup();
-
-  // setupNVS();
+  pixels.setPixelColor(0, pixels.Color(100, 100, 100));
 }
 
 int lastState = HIGH;
@@ -213,8 +205,8 @@ void handleNetwork()
         DynamicJsonDocument doc(1024);
         deserializeJson(doc, responseText);
 
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
+        Serial1.print("HTTP Response code: ");
+        Serial1.println(httpResponseCode);
 
         // String payload = http.getString();
         // String gasLevel = http.header("x-gas-level");
@@ -243,8 +235,8 @@ void handleNetwork()
       }
       else
       {
-        Serial.print("Error code: ");
-        Serial.println(httpResponseCode);
+        Serial1.print("Error code: ");
+        Serial1.println(httpResponseCode);
         turnOffLamps();
         for (int ii = 0; ii < 10; ii++)
         {
@@ -256,20 +248,20 @@ void handleNetwork()
       // Free resources
       http.end();
     }
-    else
+    else if (!provisioning)
     {
       turnOffLamps();
-      Serial.println("WiFi Disconnected");
+      Serial1.println("WiFi Disconnected");
       // disconnectCount += 1;
       pixels.setPixelColor(0, pixels.Color(100, 0, 0));
       pixels.show();
       // if (disconnectCount > 6) {
-        // Attempting reconnect
-        WiFi.reconnect();
-        Serial.println("Attempting reconnection");
-        // WiFi.disconnect(true);
-        // delay(100);
-        // ESP.restart();
+      // Attempting reconnect
+      WiFi.reconnect();
+      Serial1.println("Attempting reconnection");
+      WiFi.disconnect(true);
+      // delay(100);
+      ESP.restart();
       // }
     }
     lastTime = millis();
@@ -314,11 +306,11 @@ void loop()
   {
     pixels.setPixelColor(0, pixels.Color(0, 100, 255));
     pixels.show();
-    bool updateNeeded = esp32FOTA.execHTTPcheck();
-    if (updateNeeded)
-    {
-      esp32FOTA.execOTA();
-    }
+    // bool updateNeeded = esp32FOTA.execHTTPcheck();
+    // if (updateNeeded)
+    // {
+    //   esp32FOTA.execOTA();
+    // }
     pixels.setPixelColor(0, pixels.Color(0, 255, 0));
     pixels.show();
     checkedFirmwareUpdate = true;
@@ -326,7 +318,7 @@ void loop()
   currentState = digitalRead(BUTTON);
   if (lastState == LOW && currentState == HIGH)
   {
-    Serial.println("Button Pressed!");
+    Serial1.println("Button Pressed!");
     buttonCount++;
     if (buttonCount > 4)
     {
